@@ -33,7 +33,7 @@
 ```bash
 # Клонировать репозиторий
 git clone https://github.com/int-i-equals-0/Yahtzee.git
-cd kubiki
+cd Yahtzee
 
 # Установить зависимости
 npm install
