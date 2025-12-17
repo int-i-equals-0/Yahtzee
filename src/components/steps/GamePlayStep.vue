@@ -37,7 +37,7 @@
               </td>
               <td>
                 <template
-                  v-if="scorecards[currentPlayerIndex][key] === null && isCurrentPlayerTurn"
+                  v-if="scorecards[currentPlayerIndex][key] === null && isCurrentPlayerTurn && !isBotTurn"
                 >
                   <button
                     class="btn small-btn"
@@ -170,27 +170,35 @@
         </div>
 
         <button
+          v-if="!isBotTurn"
           class="btn roll-btn"
           :disabled="isRolling || rollsThisTurn >= maxRolls"
           @click="rollDice"
         >
           {{ rollButtonText }}
         </button>
+        <div v-else class="bot-thinking">
+          <p>Бот думает...</p>
+        </div>
       </div>
 
       <div v-else class="dice-placeholder">
         <p>
           Ожидание хода игрока <strong>{{ currentPlayerName }}</strong>
         </p>
-        <button class="btn" @click="startTurn">Начать мой ход</button>
+        <button v-if="!isBotTurn" class="btn" @click="startTurn">Начать мой ход</button>
+        <div v-else class="bot-thinking">
+          <p>Ход бота...</p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { calculateCombinations } from '@/utils/combinations'
+import { YahtzeeBot } from '@/bot/YahtzeeBot.js'
 
 const props = defineProps({
   diceCount: { type: Number, required: true },
@@ -268,6 +276,10 @@ const rollsThisTurn = ref(0)
 const currentCombos = ref({})
 const isRolling = ref(false)
 
+// Бот
+const botInstance = ref(null)
+const isBotTurn = computed(() => props.playerNames[currentPlayerIndex.value] === 'Bot')
+
 // Вычисляемые свойства
 const currentPlayerName = computed(() => {
   return props.playerNames[currentPlayerIndex.value] || 'Игрок'
@@ -292,7 +304,11 @@ const getDiceImage = (value, locked) => {
 }
 
 async function rollDice() {
-  if (isRolling.value) return
+  // console.log('[GamePlayStep] rollDice вызван. isRolling:', isRolling.value, 'isBotTurn:', isBotTurn.value);
+  if (isRolling.value) {
+    // console.warn('[GamePlayStep] rollDice заблокирован, так как isRolling === true');
+    return
+  }
 
   isRolling.value = true
   rollsThisTurn.value += 1
@@ -301,9 +317,21 @@ async function rollDice() {
   let ticks = 25
   const animate = () => {
     if (ticks <= 0) {
+      // console.log('[GamePlayStep] Анимация завершена. Обновляем комбинации.');
       isRolling.value = false
       const diceValues = dice.value.map((d) => d.value)
       currentCombos.value = calculateCombinations(diceValues, props.diceCount)
+      // console.log('[GamePlayStep] Комбинации обновлены:', currentCombos.value);
+
+      // Если ход бота, запускаем его логику
+      if (isBotTurn.value) {
+        // console.log('[GamePlayStep] Это ход бота, вызываем executeBotTurn через 500мс.');
+        setTimeout(() => {
+          executeBotTurn()
+        }, 500) // Небольшая задержка для "думания"
+      } else {
+        // console.log('[GamePlayStep] Это ход игрока, ожидаем действие.');
+      }
       return
     }
 
@@ -324,24 +352,34 @@ async function rollDice() {
 }
 
 function toggleLock(index) {
-  if (rollsThisTurn.value > 0 && rollsThisTurn.value < maxRolls && !isRolling.value) {
+  // console.log('[GamePlayStep] toggleLock вызван для индекса:', index, 'isBotTurn:', isBotTurn.value);
+  if (rollsThisTurn.value > 0 && rollsThisTurn.value < maxRolls && !isRolling.value && !isBotTurn.value) {
     dice.value[index].locked = !dice.value[index].locked
+    // console.log('[GamePlayStep] Кубик', index, 'теперь', dice.value[index].locked ? 'заморожен' : 'разморожен');
+  } else {
+    // console.warn('[GamePlayStep] toggleLock заблокирован. Условия: rollsThisTurn > 0 && rollsThisTurn < maxRolls && !isRolling && !isBotTurn');
   }
 }
 
 function startTurn() {
+  // console.log('[GamePlayStep] startTurn вызван. isBotTurn:', isBotTurn.value);
   // Генерируем начальные значения кубиков
   dice.value = dice.value.map(() => ({
     value: Math.floor(Math.random() * 6) + 1,
     locked: false,
   }))
+  // console.log('[GamePlayStep] Начальные кубики:', dice.value);
   rollsThisTurn.value = 0
   rollDice() // делаем первый бросок
 }
 
 function recordScore(key) {
+  // console.log('[GamePlayStep] recordScore вызван для ключа:', key);
   const combo = currentCombos.value[key]
-  if (!combo) return
+  if (!combo) {
+    // console.error('[GamePlayStep] recordScore: комбинация не найдена для ключа:', key);
+    return
+  }
 
   let points = combo.points
   const bonus = combo.bonus
@@ -356,17 +394,20 @@ function recordScore(key) {
   }
 
   const total = points + bonus
+  // console.log('[GamePlayStep] Записываем очки:', total, 'для комбинации', key, '(база:', combo.points, ', множитель:', (isFirstRoll && key !== 'chance' ? multiplier : 1), ', бонус:', bonus, ')');
   scorecards.value[currentPlayerIndex.value][key] = total
 
   const isComplete = scorecards.value.every((card) => Object.values(card).every((v) => v !== null))
 
   if (isComplete) {
+    // console.log('[GamePlayStep] Игра завершена. Вызываем emit finish.');
     const finalScores = props.playerNames.map((_, idx) => getTotalScore(idx))
     emit('finish', finalScores)
     return
   }
 
   // Следующий игрок
+  // console.log('[GamePlayStep] Ход завершён, передаём ход следующему игроку.');
   currentPlayerIndex.value = (currentPlayerIndex.value + 1) % props.playerNames.length
   rollsThisTurn.value = 0
   // Снимаем блокировку, но НЕ меняем значения
@@ -374,6 +415,14 @@ function recordScore(key) {
     die.locked = false
   })
   currentCombos.value = {}
+  // console.log('[GamePlayStep] Состояние сброшено для следующего хода.');
+
+  // --- НАЧАЛО ДОБАВЛЕНИЯ ---
+  if (isBotTurn.value) {
+    // console.log('[GamePlayStep] Следующий игрок - бот. Автоматически начинаем его ход.');
+    startTurn();
+  }
+  // --- КОНЕЦ ДОБАВЛЕНИЯ ---
 }
 
 // Вспомогательные функции
@@ -462,6 +511,92 @@ const getLowerSum = (playerIndex) => {
 const getTotalScore = (playerIndex) => {
   return getUpperSum(playerIndex) + getUpperBonus(playerIndex) + getLowerSum(playerIndex)
 }
+
+// Логика бота
+onMounted(() => {
+  console.log('[GamePlayStep] onMounted: инициализируем бота.');
+  botInstance.value = new YahtzeeBot(props.diceCount, 'Bot')
+  console.log('[GamePlayStep] Бот инициализирован:', botInstance.value.name);
+})
+
+// В executeBotTurn, после обработки известных действий, добавим логику для "безвыходных" ситуаций
+async function executeBotTurn() {
+  // console.log('[GamePlayStep] executeBotTurn вызван.');
+  if (!isBotTurn.value) {
+    // console.warn('[GamePlayStep] executeBotTurn: текущий игрок не бот. Выход.');
+    return
+  }
+  if (isRolling.value) {
+    // console.warn('[GamePlayStep] executeBotTurn: игра всё ещё в анимации. Выход.');
+    return
+  }
+
+  const gameState = {
+    dice: dice.value,
+    rollsThisTurn: rollsThisTurn.value,
+    scorecard: scorecards.value[currentPlayerIndex.value],
+  };
+
+  // console.log('[GamePlayStep] Передаём состояние боту:', gameState);
+  const decision = botInstance.value.makeDecision(gameState);
+  console.log('[GamePlayStep] Решение бота:', decision);
+
+  if (decision.action === 'lockDice') {
+    console.log('[GamePlayStep] Бот замораживает кости:', decision.indices);
+    decision.indices.forEach(index => {
+      dice.value[index].locked = true;
+    });
+    // После заморозки бот делает следующий бросок, если есть попытки
+    if (rollsThisTurn.value < maxRolls) {
+      console.log('[GamePlayStep] Бот бросает кости снова.');
+      setTimeout(() => {
+        rollDice();
+      }, 500);
+    } else {
+      console.log('[GamePlayStep] Попытки бота закончились. Решение было lockDice, но бросков нет. Принудительно заполняем.');
+      // Выбираем первую доступную комбинацию для заполнения
+      const firstAvailable = Object.keys(currentCombos.value).find(key => 
+        currentCombos.value[key].available && scorecards.value[currentPlayerIndex.value][key] === null
+      );
+      if (firstAvailable) {
+        recordScore(firstAvailable);
+      } else {
+        // Если нет доступных, заполняем первую незаполненную
+        const firstUnfilled = comboKeys.find(key => scorecards.value[currentPlayerIndex.value][key] === null);
+        if (firstUnfilled) {
+          recordScore(firstUnfilled);
+        }
+      }
+    }
+  } else if (decision.action === 'fillScore') {
+    console.log('[GamePlayStep] Бот заполняет комбинацию:', decision.combinationKey);
+    recordScore(decision.combinationKey);
+  } else if (decision.action === 'rollDice') {
+    console.log('[GamePlayStep] Бот решил бросить кости.');
+    if (rollsThisTurn.value < maxRolls) {
+      setTimeout(() => {
+        rollDice();
+      }, 500);
+    } else {
+      console.log('[GamePlayStep] Попытки бота закончились. Решение было rollDice, но бросков нет. Принудительно заполняем.');
+      const firstAvailable = Object.keys(currentCombos.value).find(key => 
+        currentCombos.value[key].available && scorecards.value[currentPlayerIndex.value][key] === null
+      );
+      if (firstAvailable) {
+        recordScore(firstAvailable);
+      } else {
+        const firstUnfilled = comboKeys.find(key => scorecards.value[currentPlayerIndex.value][key] === null);
+        if (firstUnfilled) {
+          recordScore(firstUnfilled);
+        }
+      }
+    }
+  } else if (decision.action === 'startTurn') {
+    console.log('[GamePlayStep] Бот должен начать ход. Это неожиданно для executeBotTurn.');
+  } else {
+    console.error('[GamePlayStep] executeBotTurn: неизвестное решение бота:', decision);
+  }
+}
 </script>
 
 <style scoped>
@@ -509,6 +644,12 @@ const getTotalScore = (playerIndex) => {
   min-height: 200px;
   width: 100%;
   max-width: 500px;
+}
+
+.bot-thinking {
+  padding: 1rem;
+  font-style: italic;
+  color: #3ccccc;
 }
 
 /* Подсказки */
