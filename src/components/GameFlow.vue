@@ -1,30 +1,22 @@
 <!-- src/components/GameFlow.vue -->
 <template>
   <div class="game-flow">
-    <!-- Шаг 1: Выбор версии и режима -->
+    <!-- Шаг 1: Настройка игры -->
     <GameModeStep
       v-if="currentStep === 'mode'"
       @select="handleModeSelect"
     />
 
-    <!-- Шаг 2: Ввод имён -->
-    <PlayerSetupStep
-      v-else-if="currentStep === 'setup'"
-      :dice-count="diceCount"
-      :game-mode="gameMode"
-      @submit="handleSetupSubmit"
-      @back="currentStep = 'mode'"
-    />
-
-    <!-- Шаг 3: Игровой процесс -->
+    <!-- Шаг 2: Игровой процесс -->
     <GamePlayStep
       v-else-if="currentStep === 'play'"
       :dice-count="diceCount"
       :player-names="playerNames"
+      :is-bot="isBot"
       @finish="handleGameFinish"
     />
 
-    <!-- Шаг 4: Экран победителя -->
+    <!-- Шаг 3: Экран победителя -->
     <GameOverStep
       v-else-if="currentStep === 'over'"
       :dice-count="diceCount"
@@ -37,40 +29,35 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import GameModeStep from './steps/GameModeStep.vue'
-import PlayerSetupStep from './steps/PlayerSetupStep.vue'
 import GamePlayStep from './steps/GamePlayStep.vue'
 import GameOverStep from './steps/GameOverStep.vue'
 
 const currentStep = ref('mode')
 const diceCount = ref(null)
-const gameMode = ref(null)
 const playerNames = ref([])
-const finalScores = reactive([])
+const isBot = ref([])
+const finalScores = ref([])
 
-const handleModeSelect = ({ mode, count }) => {
-  gameMode.value = mode
-  diceCount.value = count
-  currentStep.value = 'setup'
-}
-
-const handleSetupSubmit = (names) => {
-  playerNames.value = names
-  currentStep.value = 'play'
+const handleModeSelect = ({ diceCount: count, playerNames: names, isBot: bots }) => {
+  diceCount.value = count;
+  playerNames.value = names;
+  isBot.value = bots;
+  currentStep.value = 'play';
 }
 
 const handleGameFinish = (scores) => {
-  finalScores.splice(0, finalScores.length, ...scores)
-  currentStep.value = 'over'
+  finalScores.value = scores;
+  currentStep.value = 'over';
 }
 
 const handleRestartSame = () => {
-  currentStep.value = 'play'
+  currentStep.value = 'play';
 }
 
 const handleRestartNew = () => {
-  currentStep.value = 'mode'
+  currentStep.value = 'mode';
 }
 </script>
 
