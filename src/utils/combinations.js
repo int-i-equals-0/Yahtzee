@@ -55,14 +55,29 @@ export function calculateCombinations(dice, diceCount) {
   }
 
   // Две пары
-  const pairs = []
+  let twoPairsPoints = 0
+  let twoPairsAvailable = false
+  const pairValues = []
   for (let i = 1; i <= 6; i++) {
-    if (counts[i - 1] >= 2) pairs.push(i)
+    if (counts[i - 1] >= 2) {
+      pairValues.push(i)
+    }
+  }
+  // Для "две пары" нужно минимум 2 значения с >= 2 кубиками
+  // Это покрывает случаи: 5-5, 5-5 (4 кубика) или 5-5, 4-4 (4 кубика) и т.д.
+  // Мы просто берём 2 самых старших значения и умножаем их на 2
+  if (pairValues.length >= 2) {
+    twoPairsPoints = (pairValues[0] + pairValues[1]) * 2 // Берём 2 самых старших номинала
+    twoPairsAvailable = true
+  } else if (pairValues.length === 1 && counts[pairValues[0] - 1] >= 4) {
+    // Случай, когда у нас 4 одинаковых: 5-5-5-5 -> это 2 пары по 5
+    twoPairsPoints = pairValues[0] * 4 // 5*2 + 5*2 = 5*4
+    twoPairsAvailable = true
   }
   lower.twoPairs = {
     name: '2P',
-    points: pairs.length >= 2 ? pairs.slice(0, 2).reduce((s, v) => s + v * 2, 0) : 0,
-    available: pairs.length >= 2,
+    points: twoPairsPoints,
+    available: twoPairsAvailable,
     isUpper: false,
     bonus: 0,
     multiplier: 2,
@@ -70,10 +85,29 @@ export function calculateCombinations(dice, diceCount) {
 
   // Три пары (только для 6 кубиков)
   if (diceCount === 6) {
+    let threePairsPoints = 0
+    let threePairsAvailable = false
+    const pairValues6 = []
+    for (let i = 1; i <= 6; i++) {
+      if (counts[i - 1] >= 2) {
+        // Учитываем, что 4 одинаковых = 2 пары, 6 одинаковых = 3 пары
+        const numPairsOfThisValue = Math.floor(counts[i - 1] / 2)
+        for (let j = 0; j < numPairsOfThisValue; j++) {
+          pairValues6.push(i)
+        }
+      }
+    }
+    // Нужно минимум 3 пары
+    if (pairValues6.length >= 3) {
+      // Берём 3 самых старших номинала пар
+      const topThreePairs = pairValues6.slice(0, 3).sort((a, b) => b - a)
+      threePairsPoints = topThreePairs.reduce((sum, val) => sum + val * 2, 0)
+      threePairsAvailable = true
+    }
     lower.threePairs = {
       name: '3P',
-      points: pairs.length === 3 ? pairs.reduce((s, v) => s + v * 2, 0) : 0,
-      available: pairs.length === 3,
+      points: threePairsPoints,
+      available: threePairsAvailable,
       isUpper: false,
       bonus: 0,
       multiplier: 2,
@@ -153,13 +187,21 @@ export function calculateCombinations(dice, diceCount) {
   // Фулл (тройня + пара)
   let hasFull = false
   let fullPoints = 0
-  if (tripleValue !== null) {
-    for (let i = 1; i <= 6; i++) {
-      if (i !== tripleValue && counts[i - 1] >= 2) {
-        hasFull = true
-        fullPoints = tripleValue * 3 + i * 2
-        break
+  // Ищем тройню и пару, допуская совпадение номинала
+  for (let i = 1; i <= 6; i++) {
+    if (counts[i - 1] >= 3) { // Нашли тройню (или больше)
+      for (let j = 1; j <= 6; j++) {
+        // Проверяем, хватает ли кубиков для пары, учитывая, что 3 уже "заняты" тройней
+        const remainingCountForPair = j === i ? counts[j - 1] - 3 : counts[j - 1]
+        if (j !== i || remainingCountForPair >= 2) { // Если номинал другой ИЛИ номинал тот же, но кубиков хватает (>=2 после отсчёта 3 для тройни)
+          if (remainingCountForPair >= 2) {
+            hasFull = true
+            fullPoints = i * 3 + j * 2
+            break // Нашли первый возможный фулл (с самой старшей тройней, потом парой)
+          }
+        }
       }
+      if (hasFull) break // Нашли фулл, выходим из внешнего цикла
     }
   }
   lower.full = {
@@ -175,21 +217,30 @@ export function calculateCombinations(dice, diceCount) {
   if (diceCount === 6) {
     let hasSecondFull = false
     let secondFullPoints = 0
-    if (tripleValue !== null) {
-      const remaining = [...counts]
-      remaining[tripleValue - 1] -= 3
-      // Ищем пару среди оставшихся
-      for (let i = 1; i <= 6; i++) {
-        if (remaining[i - 1] >= 2) {
-          hasSecondFull = true
-          secondFullPoints = tripleValue * 3 + i * 2 + remaining.reduce((sum, cnt, idx) => {
-            if (idx + 1 !== tripleValue && idx + 1 !== i) {
-              return sum + (idx + 1) * cnt
-            }
-            return sum
-          }, 0)
-          break
+    // Ищем тройню
+    for (let i = 1; i <= 6; i++) {
+      if (counts[i - 1] >= 3) { // Нашли тройню (номинал i)
+        // Копируем counts, чтобы "отметить" использованные кубики
+        const remaining = [...counts]
+        remaining[i - 1] -= 3 // Отнимаем 3 кубика для тройни
+
+        // Ищем пару среди оставшихся
+        for (let j = 1; j <= 6; j++) {
+          // Проверяем, хватает ли кубиков для пары, учитывая, что 3 уже "заняты" тройней
+          const remainingCountForPair = j === i ? remaining[j - 1] : counts[j - 1] // Берём из остатка или из исходного, если номинал другой
+          if (remainingCountForPair >= 2) { // Нашли пару
+            remaining[j - 1] = j === i ? remaining[j - 1] - 2 : remaining[j - 1] // Отнимаем 2 кубика для пары (если номинал как у тройни) или не трогаем (если другой)
+            if (j !== i) remaining[j - 1] = counts[j - 1] - 2 // Если пара другого номинала, корректируем остаток
+
+            // Подсчитываем оставшиеся кости (их должно быть 1 после тройни и пары)
+            const leftoverDiceSum = remaining.reduce((sum, count, idx) => sum + (idx + 1) * count, 0)
+            // Общая сумма для второго фулла
+            secondFullPoints = i * 3 + j * 2 + leftoverDiceSum
+            hasSecondFull = true
+            break // Нашли первый возможный второй фулл
+          }
         }
+        if (hasSecondFull) break // Нашли второй фулл, выходим из внешнего цикла
       }
     }
     lower.secondFull = {
@@ -203,15 +254,30 @@ export function calculateCombinations(dice, diceCount) {
   }
 
   // Две тройни (только для 6 кубиков)
-  const triples = []
-  for (let i = 1; i <= 6; i++) {
-    if (counts[i - 1] >= 3) triples.push(i)
-  }
   if (diceCount === 6) {
+    let twoTriplesPoints = 0
+    let twoTriplesAvailable = false
+    const tripleValues6 = []
+    for (let i = 1; i <= 6; i++) {
+      if (counts[i - 1] >= 3) {
+        // Учитываем, что 6 одинаковых = 2 тройни
+        const numTriplesOfThisValue = Math.floor(counts[i - 1] / 3)
+        for (let j = 0; j < numTriplesOfThisValue; j++) {
+          tripleValues6.push(i)
+        }
+      }
+    }
+    // Нужно минимум 2 тройни
+    if (tripleValues6.length >= 2) {
+      // Берём 2 самых старших номинала троек
+      const topTwoTriples = tripleValues6.slice(0, 2).sort((a, b) => b - a)
+      twoTriplesPoints = topTwoTriples.reduce((sum, val) => sum + val * 3, 0)
+      twoTriplesAvailable = true
+    }
     lower.twoTriples = {
       name: '2T',
-      points: triples.length >= 2 ? triples.slice(0, 2).reduce((s, v) => s + v * 3, 0) : 0,
-      available: triples.length >= 2,
+      points: twoTriplesPoints,
+      available: twoTriplesAvailable,
       isUpper: false,
       bonus: 0,
       multiplier: 2,
