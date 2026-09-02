@@ -82,7 +82,7 @@
                 <strong>
                   <span
                     class="summary-label"
-                    title="Бонус за верхнюю часть: floor(сумма_верх / 10) × 50. Например: сумма = 47 → бонус = 200."
+                    title="Бонус за верхнюю часть: floor(сумма_верх / 10) × 50. Например: сумма = 47 → бонус = 200. При отрицательной сумме это штраф: −3 → −50."
                   >
                     Бонус
                   </span>
@@ -195,30 +195,21 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { calculateCombinations } from '@/utils/combinations'
-import { YahtzeeBot } from '@/bot/YahtzeeBot.js'
+import { comboOrderFor } from '@/utils/comboOrder'
+import { createBot } from '@/bot/createBot.js'
 
 const props = defineProps({
   diceCount: { type: Number, required: true },
   playerNames: { type: Array, required: true },
   isBot: { type: Array, required: true },
+  botLevels: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['finish'])
 
 const maxRolls = 3
 
-const comboOrder5 = [
-  'unit_1', 'unit_2', 'unit_3', 'unit_4', 'unit_5', 'unit_6',
-  'pair', 'twoPairs', 'threeOfAKind', 'full',
-  'smallStraight', 'largeStraight', 'fourOfAKind', 'general', 'chance',
-]
-const comboOrder6 = [
-  'unit_1', 'unit_2', 'unit_3', 'unit_4', 'unit_5', 'unit_6',
-  'pair', 'twoPairs', 'threePairs', 'threeOfAKind', 'twoTriples',
-  'full', 'secondFull', 'smallStraight', 'largeStraight', 'fullStraight',
-  'fourOfAKind', 'general', 'marshal', 'chance',
-]
-const comboKeys = props.diceCount === 6 ? comboOrder6 : comboOrder5
+const comboKeys = comboOrderFor(props.diceCount)
 
 const dice = ref(Array(props.diceCount).fill().map(() => ({ value: 1, locked: false })))
 const scorecards = ref(props.playerNames.map(() => Object.fromEntries(comboKeys.map(key => [key, null]))))
@@ -226,7 +217,7 @@ const currentPlayerIndex = ref(0)
 const rollsThisTurn = ref(0)
 const currentCombos = ref({})
 const isRolling = ref(false)
-const botInstances = ref([])
+let botsReady = Promise.resolve([]) // боты грузят таблицу/модель асинхронно
 
 const currentPlayerName = computed(() => props.playerNames[currentPlayerIndex.value] || 'Игрок')
 const isCurrentPlayerTurn = computed(() => rollsThisTurn.value > 0)
@@ -343,11 +334,11 @@ const getComboTooltip = key => {
     unit_5: 'Пятёрки: (количество – 3) × 5. Может быть отрицательным.',
     unit_6: 'Шестёрки: (количество – 3) × 6. Может быть отрицательным.',
     pair: 'Пара — две одинаковые кости. Даёт значение × 2. Удваивается при первом броске.',
-    twoPairs: 'Две пары — две разные пары. Сумма значений × 2. Удваивается при первом броске.',
-    threePairs: 'Три пары (только с 6 кубиками). Сумма всех значений × 2. Удваивается при первом броске.',
+    twoPairs: 'Две пары — две старшие пары; каре считается за две пары. Сумма значений × 2. Удваивается при первом броске.',
+    threePairs: 'Три пары (только с 6 кубиками); каре + пара тоже три пары. Сумма всех значений × 2. Удваивается при первом броске.',
     threeOfAKind: 'Тройня — три одинаковые кости. Даёт значение × 3. Удваивается при первом броске.',
-    twoTriples: 'Две тройни (только с 6 кубиками). Сумма значений × 3. Удваивается при первом броске.',
-    full: 'Фулл — тройня + пара. Сумма очков. Удваивается при первом броске.',
+    twoTriples: 'Две тройни (только с 6 кубиками); шесть одинаковых — тоже две тройни. Сумма значений × 3. Удваивается при первом броске.',
+    full: 'Фулл — тройня + пара (пять одинаковых тоже фулл). Сумма очков. Удваивается при первом броске.',
     secondFull: 'Второй фулл — тройня + пара + одна кость (6 кубиков). Сумма всех кубиков. Удваивается при первом броске.',
     smallStraight: 'Малый стрит — 1-2-3-4-5. Даёт 15 очков. Удваивается при первом броске.',
     largeStraight: 'Большой стрит — 2-3-4-5-6. Даёт 20 очков. Удваивается при первом броске.',
@@ -377,19 +368,20 @@ const getLowerSum = playerIndex => {
 const getTotalScore = playerIndex => getUpperSum(playerIndex) + getUpperBonus(playerIndex) + getLowerSum(playerIndex)
 
 onMounted(() => {
-  botInstances.value = props.isBot.map((isBot, index) => 
-    isBot ? new YahtzeeBot(props.diceCount, props.playerNames[index]) : null
-  );
-  
+  botsReady = Promise.all(props.isBot.map((isBot, index) =>
+    isBot ? createBot(props.diceCount, { name: props.playerNames[index], level: props.botLevels[index] }) : null
+  ))
+
   nextTick(() => {
     if (isBotTurn.value) {
-      setTimeout(() => startTurn(), 500);
+      setTimeout(() => startTurn(), 500)
     }
-  });
-});
+  })
+})
 
 async function executeBotTurn() {
   if (!isBotTurn.value || isRolling.value) return
+  const bots = await botsReady
 
   const gameState = {
     dice: dice.value.map(d => d.value),
@@ -399,36 +391,18 @@ async function executeBotTurn() {
     diceCount: props.diceCount
   }
 
-  const bot = botInstances.value[currentPlayerIndex.value]
-  const decision = bot.makeDecision(gameState)
+  const bot = bots[currentPlayerIndex.value]
+  const decision = bot.makeDecision(gameState) // после третьего броска бот всегда записывает
 
-  if (decision.action === 'lockDice') {
+  if (decision.action === 'lockDice' && rollsThisTurn.value < maxRolls) {
     dice.value.forEach(die => die.locked = false)
     for (const idx of decision.indices) {
       dice.value[idx].locked = true
     }
-    
-    if (rollsThisTurn.value < maxRolls) {
-      setTimeout(() => rollDice(), 500)
-    } else {
-      const finalDecision = bot.makeFinalDecision(
-        dice.value.map(d => d.value),
-        scorecards.value[currentPlayerIndex.value]
-      )
-      if (finalDecision.action === 'fillScore') {
-        recordScore(finalDecision.key)
-      } else {
-        finalizeBotTurn()
-      }
-    }
-  } else if (decision.action === 'fillScore') {
+    setTimeout(() => rollDice(), 500)
+  } else {
     recordScore(decision.key)
   }
-}
-
-function finalizeBotTurn() {
-  const firstUnfilled = comboKeys.find(key => scorecards.value[currentPlayerIndex.value][key] === null)
-  if (firstUnfilled) recordScore(firstUnfilled)
 }
 </script>
 

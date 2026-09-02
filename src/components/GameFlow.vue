@@ -13,6 +13,7 @@
       :dice-count="diceCount"
       :player-names="playerNames"
       :is-bot="isBot"
+      :bot-levels="botLevels"
       @finish="handleGameFinish"
     />
 
@@ -38,12 +39,14 @@ const currentStep = ref('mode')
 const diceCount = ref(null)
 const playerNames = ref([])
 const isBot = ref([])
+const botLevels = ref([])
 const finalScores = ref([])
 
-const handleModeSelect = ({ diceCount: count, playerNames: names, isBot: bots }) => {
+const handleModeSelect = ({ diceCount: count, playerNames: names, isBot: bots, botLevels: levels }) => {
   diceCount.value = count;
   playerNames.value = names;
   isBot.value = bots;
+  botLevels.value = levels;
   currentStep.value = 'play';
 }
 

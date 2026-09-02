@@ -40,6 +40,17 @@
             Бот
           </button>
         </div>
+        <div v-if="player.type === 'bot' && BOT_LEVELS.length > 1" class="player-level-buttons">
+          <button
+            v-for="lvl in BOT_LEVELS"
+            :key="lvl.id"
+            :class="['btn small', { active: player.level === lvl.id }]"
+            :title="lvl.hint"
+            @click="player.level = lvl.id"
+          >
+            {{ lvl.label }}
+          </button>
+        </div>
         <button class="btn btn-negative small" @click="removePlayer(index)" :disabled="players.length <= 1">
           Удалить
         </button>
@@ -60,14 +71,15 @@
 
 <script setup>
 import { ref } from 'vue'
+import { BOT_LEVELS } from '@/bot/createBot.js'
 
 const emit = defineEmits(['select'])
 
 const diceCount = ref(6)
 
 const players = ref([
-  { name: 'Игрок 1', type: 'human' },
-  { name: 'Бот 1', type: 'bot' }
+  { name: 'Игрок 1', type: 'human', level: 'master' },
+  { name: 'Бот 1', type: 'bot', level: 'master' }
 ])
 
 const diceOptions = [
@@ -79,7 +91,8 @@ const addPlayer = () => {
   const num = players.value.length + 1
   players.value.push({
     name: players.value.some(p => p.type === 'bot') ? `Бот ${num}` : `Игрок ${num}`,
-    type: 'bot'
+    type: 'bot',
+    level: 'master',
   })
 }
 
@@ -93,11 +106,13 @@ const onSubmit = () => {
   // Подготавливаем данные для GamePlayStep
   const playerNames = players.value.map(p => p.name)
   const isBot = players.value.map(p => p.type === 'bot')
+  const botLevels = players.value.map(p => (p.type === 'bot' ? p.level : null))
 
   emit('select', {
     diceCount: diceCount.value,
     playerNames,
-    isBot
+    isBot,
+    botLevels,
   })
 }
 </script>
@@ -156,10 +171,20 @@ const onSubmit = () => {
   font-family: 'Lato', sans-serif;
 }
 
-.player-type-buttons {
+.player-type-buttons,
+.player-level-buttons {
   display: flex;
   gap: 0.3rem;
   flex: 1.5;
+}
+
+.player-level-buttons {
+  flex-basis: 100%;
+  justify-content: flex-end;
+}
+
+.player-row {
+  flex-wrap: wrap;
 }
 
 .btn.small {

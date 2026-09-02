@@ -10,6 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "node --test tests/combinations.test.mjs",
+    "bench": "node tests/bench-bot.mjs",
     "lint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
     "deploy": "gh-pages -d dist"
