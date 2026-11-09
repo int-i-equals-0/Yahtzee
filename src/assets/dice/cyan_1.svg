@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="33.753132" height="33.753132" viewBox="0 0 33.753132 33.753132">
+<defs>
+<radialGradient id="radial-pattern-0" gradientUnits="userSpaceOnUse" cx="69.235542" cy="72.808113" fx="69.235542" fy="72.808113" r="4.762942">
+<stop offset="0" stop-color="rgb(78.431373%, 89.411765%, 91.764706%)" stop-opacity="1"/>
+<stop offset="1" stop-color="rgb(49.019608%, 73.333333%, 79.215686%)" stop-opacity="1"/>
+</radialGradient>
+</defs>
+<path fill-rule="nonzero" fill="url(#radial-pattern-0)" stroke-width="0.2" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(18.823529%, 41.176471%, 51.372549%)" stroke-opacity="1" stroke-miterlimit="4" d="M 66.109322 68.146736 L 72.363228 68.146736 C 73.210884 68.146736 73.898384 68.834236 73.898384 69.681892 L 73.898384 75.935799 C 73.898384 76.783455 73.210884 77.470955 72.363228 77.470955 L 66.109322 77.470955 C 65.261665 77.470955 64.574165 76.783455 64.574165 75.935799 L 64.574165 69.681892 C 64.574165 68.834236 65.261665 68.146736 66.109322 68.146736 Z M 66.109322 68.146736 " transform="matrix(1, 0, 0, 1, -64.472603, -68.045174)"/>
+<path fill-rule="nonzero" fill="rgb(18.823529%, 41.176471%, 51.372549%)" fill-opacity="1" d="M 4.761719 3.949219 C 5.207031 3.949219 5.570312 4.3125 5.570312 4.761719 C 5.570312 5.210938 5.207031 5.574219 4.761719 5.574219 C 4.316406 5.574219 3.957031 5.210938 3.957031 4.761719 C 3.957031 4.3125 4.316406 3.949219 4.761719 3.949219 Z M 4.761719 3.949219 "/>
+</svg>
